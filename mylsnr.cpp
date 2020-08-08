@@ -68,6 +68,10 @@ int create_listen_server_tcp_socket()
     srv_addr.sin_port   = htons(5555);
     srv_addr.sin_addr.s_addr = INADDR_ANY;
 
+    int sockopt = 1;
+    retVal = setsockopt( socketfd, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof(int) );
+    if( retVal == -1 ) { perror("set reuse addres failed"); }
+
     retVal = bind( socketfd, (sockaddr*)&srv_addr, sizeof(srv_addr) );
     if(retVal < 0 ) return -2;
     retVal = listen( socketfd, 100);
@@ -93,8 +97,9 @@ int create_listen_server_unix_socket()
     my_addr.sun_family = AF_UNIX;
     strncpy( my_addr.sun_path, MY_SOCK_PATH, sizeof(my_addr.sun_path) - 1);
 
+    int retVal = 0;
     size_t len = strlen(my_addr.sun_path) + sizeof(my_addr.sun_family);
-    int retVal = bind(sfd, (struct sockaddr *) &my_addr, len);
+    retVal = bind(sfd, (struct sockaddr *) &my_addr, len);
     if( retVal < 0 ) return -2;
     retVal = listen( sfd, 3);
     if(retVal < 0 ) return -3;
