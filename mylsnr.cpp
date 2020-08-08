@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
@@ -51,6 +52,9 @@ void setnonblocking(int sock);
  * @return Type of socket which ready for accept.
  */
 AcceptSocketType check_for_accept_connections(int tcp_fd, int unix_fd, ErrorType& errorType, int &error);
+
+/// @brief wait for child pid with no hung.
+pid_t wait_disp_child();
 
 /**
  * @brief Create, bind and start to listen the server tcp socket.
@@ -137,6 +141,7 @@ int accept_dispatcher_connection(int unix_fd)
     return disp_fd;
 }
 
+pid_t disp_pid = -1;
 int create_dispatcher()
 {
     int r = fork();
@@ -150,6 +155,7 @@ int create_dispatcher()
         exit(13);
     }
     printf("Dispatcher created with PID = [%d]\n", r );
+    disp_pid = (pid_t)r;
     return 0;
 }
 const int DISPATCHERS_MAX = 10;
@@ -182,7 +188,14 @@ int main(int argc, char *argv[])
         int error;
         acceptSocketType = check_for_accept_connections(tcp_fd, unix_fd, errorType, error);
         if(acceptSocketType == AcceptSocketType::NONE) {
-            if(errorType == ErrorType::TIMEOUT) continue;
+            if(errorType == ErrorType::TIMEOUT) {
+                pid_t pid = wait_disp_child();
+                // restart dispatcher child if need.
+                if( pid > pid_t(0) ) {
+                    create_dispatcher();
+                }
+                continue;
+            }
             if(errorType == ErrorType::ERROR  ) break;
         } else if(acceptSocketType == AcceptSocketType::TCP) {
             int new_fd = accept_incoming_connection(tcp_fd);
@@ -212,11 +225,15 @@ int main(int argc, char *argv[])
         }
     }
     }
+    write(dispatched_fds[0], "EXIT", 4);
+    sleep(2);
+    pid_t pid = wait_disp_child();
     for(int i = 0; i < DISPATCHERS_MAX; i++ ) { if(dispatched_fds[i] > 0) close(dispatched_fds[i]); }
     close(tcp_fd);
     close(unix_fd);
     unlink(MY_SOCK_PATH);
 
+    printf("Done...\n");
     return 0;
 }
 
@@ -277,7 +294,7 @@ AcceptSocketType check_for_accept_connections(int tcp_fd, int unix_fd, ErrorType
     if(rv == -1) {
         error = errno;
         errorType = ErrorType::ERROR;
-        perror("select");
+        fprintf(stderr,"select failed: [%d] \"%s\"\n", errno, strerror(errno));
         return AcceptSocketType::NONE;
     } else if(rv == 0) {
         errorType = ErrorType::TIMEOUT;
@@ -292,3 +309,20 @@ AcceptSocketType check_for_accept_connections(int tcp_fd, int unix_fd, ErrorType
     return AcceptSocketType::NONE;
 }
 
+pid_t wait_disp_child()
+{
+    int wstatus = 0;
+    pid_t pid = waitpid(pid_t(-1), &wstatus, WNOHANG );
+    if(pid == pid_t(-1)) {
+        perror("waitpid failed");
+        return pid_t(-1);
+    } else if( pid > pid_t(0) ) {
+        if(WIFEXITED(wstatus)) {
+            fprintf( stderr, "ERROR: dispatcher child pid=[%d] has exit with status=[%d]\n", (int)pid, WEXITSTATUS(wstatus) );
+        } else if(WEXITSTATUS(wstatus)) {
+            fprintf( stderr, "ERROR: dispatcher child pid=[%d] has killed by signal=[%d]\n", (int)pid, WTERMSIG(wstatus) );
+        }
+        return pid;
+    }
+    return pid_t(0);
+}

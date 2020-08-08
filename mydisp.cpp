@@ -89,6 +89,12 @@ void put_revents( int socket, short events ) {
     }
 }
 
+void sig_int_handler(int)
+{
+    printf("SIGINT\n");
+}
+
+
 int main(int argc, char *argv[])
 {
     if( argc != 2 ) {
@@ -119,6 +125,8 @@ int main(int argc, char *argv[])
 
     setnonblocking(sfd);
 
+    signal(SIGINT,sig_int_handler);
+
     while(1) {
         ErrorType errorType;
         int error;
@@ -128,7 +136,7 @@ int main(int argc, char *argv[])
 
         if( errorType == ErrorType::ERROR ) {
             printf("ERROR\n");
-            break;
+//            break;
         } else if( errorType == ErrorType::TIMEOUT ) {
 //            printf("TIMEOUT\n");
         } else if( errorType == ErrorType::NONE ) {
@@ -156,6 +164,9 @@ int main(int argc, char *argv[])
                 } else if( memcmp(message,"CONFIG",6) == 0 ) {
                     ssize_t read_size = recv(sfd, message, 200, 0);
                     printf("INFO: Dispatcher config received read size = %ld\n", read_size);
+                } else if( memcmp(message,"EXIT",4) == 0 ) {
+                    printf("INFO: Dispatcher config received EXIT request = %ld\n", read_size);
+                    break;
                 }
             } else if(count > 0) {
                 // Process clients TCP sockets here.
@@ -177,7 +188,10 @@ int main(int argc, char *argv[])
                         char buffer[100];
                         ssize_t r = recv(sockets[i].socket, buffer, 100, 0);
                         if( r == 0 ) {
-                            // try to write to socket. Check on the next cycle what we have.
+                            // Typical client drop the connection.
+                            // Try to write bytes to socket.
+                            // Check on the next cycle what we have.
+                            // We wil expect the POLLERR and POLLHUP.
                             r = write(sockets[i].socket, "EXIT\n", 5 );
                             if( r < 0 ) {
                                 printf("client socket error, read (test write) failed:\n");
@@ -207,9 +221,16 @@ int main(int argc, char *argv[])
                             close(sockets[i].socket);
                             del_socket(sockets[i].socket);
                         }
-                        printf("write to client socket: %d bytes\n",r);
+                        if( r == -1 ) {
+                            fprintf(stderr, "write to client socket failed, drop connection: [%d] \"%s\"\n",errno,strerror(errno));
+                            shutdown(sockets[i].socket,SHUT_RDWR);
+                            close(sockets[i].socket);
+                            del_socket(sockets[i].socket);
+                        } else {
+                            printf("write to client socket: %d bytes\n",r);
+                            set_events(sockets[i].socket, POLLIN);
+                        }
                         // Wait for client send command.
-                        set_events(sockets[i].socket, POLLIN);
                     }
                 }
             }
@@ -246,7 +267,7 @@ ErrorType poll_sockets(int unix_fd, short &revents, int &error, int &count) {
 //    int ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *tmo_p, const sigset_t *sigmask);
     if(retVal == -1) {
         error = errno;
-        perror("disp select");
+        fprintf(stderr,"disp child poll failed: [%d] \"%s\"\n", errno, strerror(errno));
         return ErrorType::ERROR;
     } else if(retVal == 0) {
 //        printf("disp timeout occurred\n");
