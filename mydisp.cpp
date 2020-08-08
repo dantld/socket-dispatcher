@@ -12,14 +12,9 @@
 #include <stdint.h>
 #include <assert.h>
 #include <fcntl.h>
+#include <poll.h>
 
 #include "utils.h"
-
-enum class AcceptSocketType : uint16_t {
-    UNIX,
-    TCP,
-    NONE
-};
 
 enum class ErrorType : uint16_t {
     ERROR,
@@ -27,9 +22,72 @@ enum class ErrorType : uint16_t {
     NONE,
 };
 
-AcceptSocketType check_for_read(int tcp_fd, int unix_fd, ErrorType& errorType, int &error);
+enum class ClientStatus : uint16_t {
+    HELLO,
+    BYE,
+    ECHO,
+    NONE,
+};
+
+/// @brief Poll all our sockets for events.
+ErrorType poll_sockets(int unix_fd, short &revents, int &error, int &count);
+
 int recv_fd(int fd, ssize_t (*userfunc)(int, const void *, size_t));
 
+const int MAX_SOCKETS = 10;
+const int FREE_SOCKET = -1;
+const int NO_EVENTS   = 0;
+struct Sockets { int socket = FREE_SOCKET; short events = NO_EVENTS; short revents = NO_EVENTS; ClientStatus status = ClientStatus::NONE; };
+static Sockets sockets[MAX_SOCKETS];
+
+bool put_socket( int socket )
+{
+    for( int i = 0; i < MAX_SOCKETS; i++ ) {
+        if( sockets[i].socket == FREE_SOCKET ) {
+            sockets[i].socket = socket;
+            // First time check the possibility of writing to socket.
+            sockets[i].events = POLLOUT;
+            // Send the HELLO message.
+            sockets[i].status = ClientStatus::HELLO;
+            return true;
+        }
+    }
+    return false;
+}
+bool del_socket( int socket )
+{
+    for( int i = 0; i < MAX_SOCKETS; i++ ) {
+        if( sockets[i].socket == socket ) {
+            sockets[i].socket  = FREE_SOCKET;
+            sockets[i].events  = NO_EVENTS;
+            sockets[i].revents = NO_EVENTS;
+            sockets[i].status  = ClientStatus::NONE;
+            return true;
+        }
+    }
+    return false;
+}
+void set_events( int socket, short events ) {
+    for( int i = 0; i < MAX_SOCKETS; i++ ) {
+        if( sockets[i].socket == socket ) {
+            sockets[i].events  = events;
+            sockets[i].revents = NO_EVENTS;
+        }
+    }
+}
+void put_revents( int socket, short events ) {
+    for( int i = 0; i < MAX_SOCKETS; i++ ) {
+        sockets[i].revents = 0;
+        if( sockets[i].socket == socket ) {
+            if( events & POLLNVAL ) {
+                fprintf(stderr,"ERROR: invalide socket POLLINVAL event has come.\n");
+                sockets[i].socket = FREE_SOCKET;
+            }
+            sockets[i].events  = NO_EVENTS;
+            sockets[i].revents = events;
+        }
+    }
+}
 
 int main(int argc, char *argv[])
 {
@@ -39,6 +97,8 @@ int main(int argc, char *argv[])
     }
     printf("Dispatcher started\n");
     printf("Try connect to: %s\n", argv[1]);
+
+    for(int i = 0; i < MAX_SOCKETS; i++ ) sockets[i].socket = FREE_SOCKET;
 
     int sfd;
     struct sockaddr_un my_addr;
@@ -62,30 +122,96 @@ int main(int argc, char *argv[])
     while(1) {
         ErrorType errorType;
         int error;
-        AcceptSocketType ast = check_for_read(-1, sfd, errorType, error);
-        if( ast == AcceptSocketType::NONE ) {
+        int count;
+        short sfd_revents = 0;
+        errorType = poll_sockets( sfd, sfd_revents, error, count );
+
         if( errorType == ErrorType::ERROR ) {
             printf("ERROR\n");
             break;
-        }
-        if( errorType == ErrorType::TIMEOUT ) {
-            //printf("TIMEOUT\n");
-        }
-        } else if( ast == AcceptSocketType::UNIX) {
-            char message[200];
-            ssize_t read_size = recv(sfd, message, 200, MSG_PEEK);
-            if(!read_size) {
-                fprintf(stderr,"ERROR: read zero bytes from dispatcher socket, exiting...\n");
-                break;
-            }
-            printf("ready for read data from unix socket [%d]\n", read_size);
-            if(read_size == 2) {
-                int s = recv_fd(sfd, NULL);
-                write(s,"HELLO!!!!\n",10);
-                close(s);
-            } else if( memcmp(message,"CONFIG",6) == 0 ) {
-                ssize_t read_size = recv(sfd, message, 200, 0);
-                printf("INFO: Dispatcher config received\n");
+        } else if( errorType == ErrorType::TIMEOUT ) {
+//            printf("TIMEOUT\n");
+        } else if( errorType == ErrorType::NONE ) {
+            if( sfd_revents != 0) {
+                printf("dispatcher UNIX socket activity!\n");
+                char message[200];
+                ssize_t read_size = recv(sfd, message, 200, MSG_PEEK);
+                if(!read_size) {
+                    fprintf(stderr,"ERROR: read zero bytes from dispatcher socket, exiting...\n");
+                    break;
+                }
+                printf("ready for read data from unix socket [%d]\n", read_size);
+                if(read_size == 2) {
+                    int s = recv_fd(sfd, NULL);
+                    if(s != -1) {
+                        if(!put_socket(s)) {
+                            write(s,"FAILED BUSY TRY LATER!!!!\n",25);
+                            close(s);
+                        } else {
+                            printf("Accept received socket\n");
+                        }
+                    } else {
+                        fprintf(stderr,"ERROR: receive socket failed\n");
+                    }
+                } else if( memcmp(message,"CONFIG",6) == 0 ) {
+                    ssize_t read_size = recv(sfd, message, 200, 0);
+                    printf("INFO: Dispatcher config received read size = %ld\n", read_size);
+                }
+            } else if(count > 0) {
+                // Process clients TCP sockets here.
+                for( int i = 0; i < MAX_SOCKETS; i++ ) {
+                    if( sockets[i].socket  == FREE_SOCKET ) continue;
+                    if( sockets[i].revents == 0 ) continue;
+                    if( sockets[i].revents & POLLERR ||
+                        sockets[i].revents & POLLHUP ||
+                        sockets[i].revents & POLLRDHUP) {
+                        bool pollErr   = sockets[i].revents & POLLERR;
+                        bool pollHup   = sockets[i].revents & POLLHUP;
+                        bool pollRdHup = sockets[i].revents & POLLRDHUP;
+                        printf("client socket error: [ERR:%d HUP:%d RDHUP:%d] close socket.\n", pollErr, pollHup, pollRdHup );
+                        close(sockets[i].socket);
+                        del_socket(sockets[i].socket);
+                        continue;
+                    }
+                    if( sockets[i].revents & POLLIN ) {
+                        char buffer[100];
+                        ssize_t r = recv(sockets[i].socket, buffer, 100, 0);
+                        if( r == 0 ) {
+                            // try to write to socket. Check on the next cycle what we have.
+                            r = write(sockets[i].socket, "EXIT\n", 5 );
+                            if( r < 0 ) {
+                                printf("client socket error, read (test write) failed:\n");
+                                close(sockets[i].socket);
+                                del_socket(sockets[i].socket);
+                                continue;
+                            }
+                            continue;
+                        }
+                        printf("client reading socket: %d\n",r);
+                        if( memcmp(buffer,"EXIT",4) == 0) {
+                            sockets[i].status = ClientStatus::BYE;
+                        }
+                        set_events(sockets[i].socket, POLLOUT);
+                    }
+                    if( sockets[i].revents & POLLOUT ) {
+                        ssize_t r = 0;
+                        if( sockets[i].status == ClientStatus::HELLO ) {
+                            r = write(sockets[i].socket, "HELLO!!!!\n", 10 );
+                            // Switch to next mode ECHO.
+                            sockets[i].status = ClientStatus::ECHO;
+                        } else if( sockets[i].status == ClientStatus::ECHO ) {
+                            r = write(sockets[i].socket, "ECHOO!!!!\n", 10 );
+                        } else if( sockets[i].status == ClientStatus::BYE ) {
+                            r = write(sockets[i].socket, "BYE...\n", 7 );
+                            shutdown(sockets[i].socket,SHUT_RDWR);
+                            close(sockets[i].socket);
+                            del_socket(sockets[i].socket);
+                        }
+                        printf("write to client socket: %d bytes\n",r);
+                        // Wait for client send command.
+                        set_events(sockets[i].socket, POLLIN);
+                    }
+                }
             }
         }
     }
@@ -95,43 +221,50 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-AcceptSocketType check_for_read(int tcp_fd, int unix_fd, ErrorType& errorType, int &error)
-{
-    errorType = ErrorType::NONE;
+ErrorType poll_sockets(int unix_fd, short &revents, int &error, int &count) {
+    int retVal = 0;
     error = 0;
-    fd_set set, errset;
-    struct timeval timeout;
-    int rv;
-
-    timeout.tv_sec  = 5;
-    timeout.tv_usec = 0;
-    FD_ZERO(&set);
-    //if( tcp_fd > 0 ) FD_SET(tcp_fd,  &set);
-    FD_SET(unix_fd, &set);
-    FD_SET(unix_fd, &errset);
-    //int max_fd = tcp_fd > unix_fd ? tcp_fd : unix_fd;
-    rv = select(unix_fd + 1, &set, NULL, &errset, &timeout);
-    if(rv == -1) {
-        error = errno;
-        errorType = ErrorType::ERROR;
-        perror("disp select");
-        return AcceptSocketType::NONE;
-    } else if(rv == 0) {
-        errorType = ErrorType::TIMEOUT;
-        printf("disp timeout occurred\n");
-        return AcceptSocketType::NONE;
-    } else if( tcp_fd > 0 && FD_ISSET(tcp_fd,&set) ) {
-        return AcceptSocketType::TCP;
-    } else if( FD_ISSET(unix_fd,&set) ) {
-        return AcceptSocketType::UNIX;
-    } else if( FD_ISSET(unix_fd,&errset) ) {
-        errorType = ErrorType::ERROR;
-        fprintf(stderr, "disp unix socket has error state\n");
+    count = 0;
+    revents = 0;
+    struct pollfd p[MAX_SOCKETS+1];
+    nfds_t nfds = 1;
+    p[0].fd = unix_fd;
+    p[0].events = POLLIN;
+    p[0].revents = 0;
+    for( int index = 0, pidx = 1; index < MAX_SOCKETS; index++ ) {
+        if(sockets[index].socket == FREE_SOCKET) continue;
+        p[pidx].fd = sockets[index].socket;
+        p[pidx].events = sockets[index].events;// POLLIN;
+        // depend on status we decide: do we need wait for write to socket availability.
+        //if( sockets[index].status == 0 ) p[pidx].events |= POLLOUT;
+        p[pidx].revents = 0;
+        nfds++;
+        pidx++;
     }
-    assert(0);
-    return AcceptSocketType::NONE;
+//    printf("Check nfds=%d\n",nfds);
+    retVal = poll(p, nfds, 1000);
+//    int ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *tmo_p, const sigset_t *sigmask);
+    if(retVal == -1) {
+        error = errno;
+        perror("disp select");
+        return ErrorType::ERROR;
+    } else if(retVal == 0) {
+//        printf("disp timeout occurred\n");
+        return ErrorType::TIMEOUT;
+    }
+//    printf("REVENTS %d\n",retVal);
+    if( p[0].revents != 0 ) {
+        count++;
+        revents = p[0].revents;
+    }
+    for( int i = 1; i < nfds; i++ ) {
+        if(p[i].revents == 0) continue;
+        printf("check clients socket [%d:0x%0X] \n", p[i].fd, p[i].revents);
+        put_revents( p[i].fd, p[i].revents );
+        count++;
+    }
+    return ErrorType::NONE;
 }
-
 
 
 /* size of control buffer to send/recv one file descriptor */

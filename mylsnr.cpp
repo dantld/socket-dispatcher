@@ -187,6 +187,7 @@ int main(int argc, char *argv[])
                 break;
             }
             /// @todo process new socket here.
+            printf("Send accpted TCP socket to dispatcher process\n");
             send_fd(dispatched_fds[0], new_fd);
             close(new_fd);
         } else if(acceptSocketType == AcceptSocketType::UNIX) {
