@@ -1,8 +1,17 @@
 
 project(server)
 
-set(CXXFLAGS -ggdb)
+set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} -ggdb)
 
 add_executable(mylsnr mylsnr.cpp utils.cpp)
 
-add_executable(mydisp mydisp.cpp utils.cpp)
+add_executable(mydisp
+	mydisp.cpp
+	utils.cpp
+	Socket.h
+	Socket.cpp
+	SocketFactory.h
+	SocketsPoller.cpp
+	ReceivedTcpSocketFactory.cpp
+	UnixSocketFactory.cpp
+	)
