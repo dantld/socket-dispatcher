@@ -38,8 +38,15 @@ public:
 
 	bool delSocket(Socket::Ptr socket) {
 		if(_sockets.size() == _maxSize) return false;
-		SocketsListImpl::iterator it = std::remove(_sockets.begin(),_sockets.end(),socket);
-		return it != _sockets.end();
+		SocketsListImpl::iterator it = _sockets.begin();
+		while(it != _sockets.end()) {
+			if((*it)->descriptor() == socket->descriptor()) {
+				_sockets.erase(it);
+				return true;
+			}
+			it++;
+		}
+		return false;
 	}
 
 	SocketsListImpl::iterator begin() { return _sockets.begin(); }
