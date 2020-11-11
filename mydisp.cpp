@@ -174,8 +174,8 @@ int main(int argc, char *argv[])
 
     signal(SIGINT,sig_int_handler);
 
-	bool dispatcherFailed = true;
-    while(dispatcherFailed) {
+	bool dispatcherFailed = false;
+    while(!dispatcherFailed) {
     	unixSocket->events(POLLIN);
     	/// TODO: need variant for create sockets list on a stack!
     	///       Bad design: always allocate object at heap.
@@ -188,7 +188,7 @@ int main(int argc, char *argv[])
 				if(s->socketType() == dsockets::SocketType::UNIX) {
 					std::cout << "INFO: unix socket activity." << std::endl;
 					if(!dispatcherProcess(unixSocket, receivedTcpSocketFactory, socketsList)) {
-						dispatcherFailed = false;
+						dispatcherFailed = true;
 						break;
 					}
 				} else if(s->socketType() == dsockets::SocketType::TCP) {
@@ -200,6 +200,11 @@ int main(int argc, char *argv[])
 					}
 				}
 			}
+        } else if( errorType == dsockets::ErrorType::TIMEOUT ) {
+        	/// TODO: process free time for something.
+        } else if( errorType == dsockets::ErrorType::ERROR ) {
+			dispatcherFailed = true;
+			std::cerr << "FAILED: dispatcher has failed!" << std::endl;
         }
     }
 
