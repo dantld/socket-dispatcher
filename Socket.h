@@ -34,9 +34,10 @@ public:
 
 	Socket() = delete;
 
-	explicit Socket(int descriptor, SocketType socketType) :
+	explicit Socket(int descriptor, SocketType socketType, bool listenSocket = false) :
 		_descriptor(descriptor),
-		_socketType(socketType)
+		_socketType(socketType),
+		_listenSocket(listenSocket)
 	{
 		assert(_descriptor != FREE_SOCKET);
 	};
@@ -49,17 +50,25 @@ public:
 	inline short revents() const noexcept { return _revents; }
 	inline void  revents(short revents) noexcept { _revents = revents; }
 	inline SocketType socketType() const noexcept { return _socketType; }
+	inline bool listenSocket() const noexcept { return _listenSocket; }
 	inline ClientStatus clientStatus() const noexcept { return _clientStatus; }
 	inline void clientStatus(ClientStatus clientStatus) noexcept { _clientStatus = clientStatus; }
 
 	using Ptr = std::shared_ptr<Socket>;
+
+
+	virtual Ptr acceptConnection();
 private:
 	int   _descriptor;
 	short _events  = NO_EVENTS;
 	short _revents = NO_EVENTS;
-	SocketType _socketType;
+	SocketType _socketType = SocketType::UNKNOWN;
+	bool _listenSocket = false;
 	ClientStatus _clientStatus = ClientStatus::NONE;
 };
 
+namespace utils {
+	bool sendSocket(Socket::Ptr socketSender, Socket::Ptr socketToSend);
+}
 } // sockets
 #endif /* SOCKET_H_ */

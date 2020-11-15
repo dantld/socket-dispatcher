@@ -18,6 +18,7 @@ namespace dsockets {
 
 enum class ErrorType : uint16_t {
     ERROR,
+    INTERRUPTED,
     TIMEOUT,
     NONE,
 };
@@ -47,6 +48,10 @@ public:
 			it++;
 		}
 		return false;
+	}
+
+	void clear() {
+		_sockets.clear();
 	}
 
 	SocketsListImpl::iterator begin() { return _sockets.begin(); }

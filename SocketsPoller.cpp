@@ -45,6 +45,10 @@ ErrorType SocketsPollerImpl::pollSockets(const SocketsList::Ptr inputSockets, So
 
     if(retVal == -1) {
         error = errno;
+        if(error == EINTR) {
+            fprintf(stderr,"dispatch poll interrupted\n");
+        	return ErrorType::INTERRUPTED;
+        }
         fprintf(stderr,"dispatch child poll failed: [%d] \"%s\"\n", errno, strerror(errno));
         return ErrorType::ERROR;
     } else if(retVal == 0) {

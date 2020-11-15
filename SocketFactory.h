@@ -23,6 +23,8 @@ public:
 };
 
 SocketFactory::Ptr createUnixSocketFactory(const std::string& path);
+SocketFactory::Ptr createUnixListenerSocketFactory(const std::string& path);
+SocketFactory::Ptr createTcpListenerSocketFactory(std::uint16_t port, std::uint16_t queueLength = 32);
 SocketFactory::Ptr createReceivedTcpSocketFactory(Socket::Ptr unixSocket);
 
 } // end name space utility
