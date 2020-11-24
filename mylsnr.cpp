@@ -35,7 +35,7 @@ int create_dispatcher()
         return -1;
     }
     if( r == 0 ) {
-        execl("mydisp","mydisp",MY_SOCK_PATH);
+        execl("mydisp","mydisp",MY_SOCK_PATH,nullptr);
         assert(0);
         exit(13);
     }
@@ -96,7 +96,7 @@ bool processDispatcherConnection(
 			appCfg->getCertFile().c_str(),
 			appCfg->getKeyFile().c_str()
 			);
-    assert(r<sizeof(configBuffer));
+    assert(static_cast<size_t>(r) < sizeof(configBuffer));
     bytes = write( dispatcherConnection->descriptor(), configBuffer, r );
     if(bytes < 0) {
         fprintf(stderr,"Send config to dispatcher failed, exiting...\n");
@@ -198,7 +198,7 @@ try {
     sayGoodbyeToAllDispatchers(socketsList);
 
     sleep(2);
-    pid_t dispatcherPid = wait_disp_child();
+    wait_disp_child();
 
     printf("Done...\n");
 

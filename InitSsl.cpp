@@ -31,7 +31,7 @@ namespace {
 				<< " try to open file: "
 				<< (const char*)userdata
 				<< std::endl;
-		if(keyFilePassword.size() > size) {
+		if(size > 0 && keyFilePassword.size() > static_cast<size_t>(size)) {
 			return 0;
 		}
 		memcpy(buf, keyFilePassword.data(), keyFilePassword.size());
@@ -109,8 +109,6 @@ int createContext(
 
 int createClientContext()
 {
-	char errorTextBuffer[1024] = "";
-
 	if(sslGlobalCtx) {
 		return 0;
 	}

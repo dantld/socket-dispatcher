@@ -19,11 +19,15 @@ try {
 	dsockets::ssl::createClientContext();
 	dsockets::utility::SocketFactory::Ptr socketFactory = dsockets::utility::createTcpSslConnectSocketFactory("localhost", 5555);
 	dsockets::Socket::Ptr clientSocket = socketFactory->createSocket();
+	if(!clientSocket) {
+		std::cerr << "connect failed." << std::endl;
+		return 1;
+	}
 	while(true) {
 		char recvBuffer[1024];
 		ssize_t bytes = dsockets::utils::read(clientSocket,recvBuffer,sizeof(recvBuffer),0);
 		if(bytes > 0) {
-			printf("%.*s\n", bytes, recvBuffer);
+			printf("%.*s\n", static_cast<int>(bytes), recvBuffer);
 		}
 		std::string userInputLine;
 		std::cin >> userInputLine;

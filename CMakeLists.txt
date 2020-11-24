@@ -1,8 +1,12 @@
+cmake_minimum_required(VERSION 3.0)
 
 project(server)
 
-#set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} "-ggdb")
-set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} "-ggdb -fsanitize=address -fno-omit-frame-pointer")
+set(CMAKE_CXX_FLAGS_DEBUG "-Wall -Wpedantic -Werror -ggdb")
+set(CMAKE_CXX_FLAGS_RELEASE "-Wall -Wpedantic -Werror")
+#set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} "-ggdb -fsanitize=address -fno-omit-frame-pointer")
+
+find_package(OpenSSL REQUIRED)
 
 add_executable(mylsnr
 	mylsnr.cpp
@@ -49,6 +53,6 @@ add_executable(myclnt
 	ApplicationConfig.cpp
 )
 
-target_link_libraries(mylsnr ssl crypto)
-target_link_libraries(mydisp ssl crypto)
-target_link_libraries(myclnt ssl crypto)
+target_link_libraries(mylsnr OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(mydisp OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(myclnt OpenSSL::SSL OpenSSL::Crypto)

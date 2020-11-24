@@ -16,6 +16,8 @@ namespace dsockets {
 
 class SocketsPoller {
 public:
+	static const size_t MAX_SOCKETS_TO_POLL = 1024;
+
 	using Ptr = std::shared_ptr<SocketsPoller>;
 
 	virtual ~SocketsPoller() {}

@@ -31,11 +31,6 @@ public:
 	    unlink(_path.c_str());
 	}
 	Socket::Ptr acceptConnection() override {
-	    struct sockaddr_un peer_addr;
-	    socklen_t peer_addr_size;
-
-	    peer_addr_size = sizeof(struct sockaddr_un);
-	//    int disp_fd = accept( unix_fd, (struct sockaddr *) &peer_addr, &peer_addr_size);
 	    int new_fd = accept( descriptor(), NULL, NULL);
 	    if (new_fd < 0) {
 	        fprintf(stderr,"accept dispatcher connection failed: %s\n", strerror(errno));

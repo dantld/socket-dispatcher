@@ -30,7 +30,8 @@ ErrorType SocketsPollerImpl::pollSockets(const SocketsList::Ptr inputSockets, So
     int retVal = 0;
     int error = 0;
     int index = 0;
-    struct pollfd pollInfo[inputSockets->size()];
+    assert(inputSockets->size() <= MAX_SOCKETS_TO_POLL);
+    struct pollfd pollInfo[MAX_SOCKETS_TO_POLL];
 
     index = 0;
     for( const auto &socket : *inputSockets ) {
@@ -64,7 +65,7 @@ ErrorType SocketsPollerImpl::pollSockets(const SocketsList::Ptr inputSockets, So
         	index++;
         	continue;
         }
-        printf("check clients socket [%d:%d:0x%0X] \n", pollInfo[index].fd, socket->socketType(), pollInfo[index].revents);
+        printf("check clients socket [%d:%d:0x%0X] \n", pollInfo[index].fd, static_cast<int>(socket->socketType()), pollInfo[index].revents);
     	socket->revents(pollInfo[index].revents);
     	index++;
     	outputSockets->putSocket(socket);

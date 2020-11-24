@@ -49,7 +49,7 @@ bool processConfig(char *bufferConfig, size_t bufferSize)
 	char lineBuffer[256];
 	const char *startPointer = bufferConfig;
 	const char *endPointer = bufferConfig;
-	while( (endPointer - bufferConfig) < bufferSize ) {
+	while( static_cast<size_t>(endPointer - bufferConfig) < bufferSize ) {
 		if(*endPointer != '\n') {
 			endPointer++;
 			continue;
@@ -122,7 +122,7 @@ bool dispatcherProcess(
 			return false;
 		}
 		printf("INFO: Dispatcher has received configuration read size = %ld\n", read_size);
-		printf("\n%.*s\n", read_size, configBuffer );
+		printf("\n%.*s\n", static_cast<int>(read_size), configBuffer );
 		return processConfig( configBuffer, static_cast<size_t>(read_size) );
 	} else if( memcmp(message,"EXIT",4) == 0 ) {
 		printf("INFO: Dispatcher has received EXIT request = %ld\n", read_size);
@@ -152,7 +152,7 @@ bool processClient(dsockets::Socket::Ptr clientSocket) {
 				return false;
 			}
 		} else if(bytes > 0) {
-			printf("client reading socket: %d\n",bytes);
+			printf("client reading socket: %ld\n",bytes);
 			if( memcmp(buffer,"EXIT",4) == 0) {
 				clientSocket->clientStatus(dsockets::ClientStatus::BYE);
 			}
@@ -179,7 +179,7 @@ bool processClient(dsockets::Socket::Ptr clientSocket) {
             //shutdown(clientSocket->descriptor(),SHUT_RDWR);
             return false;
         } else {
-            printf("write to client socket: %d bytes\n",bytes);
+            printf("write to client socket: %ld bytes\n",bytes);
             // Wait for client send command.
         }
     }
