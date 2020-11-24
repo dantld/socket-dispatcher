@@ -110,7 +110,7 @@ void processSockets(
 		dsockets::SocketsList::Ptr outputSocketsList)
 {
 	for(auto socket : *outputSocketsList) {
-		if((socket->revents() & POLLHUP) || (socket->revents() & POLLERR) || (socket->revents() & POLLNVAL)) {
+		if(socket->isDropped()) {
 			socketsList->delSocket(socket);
 			// TODO: need special action for dispatcher UNIX client socket check for process???.
 			continue;
@@ -176,10 +176,7 @@ try {
     while(!exitRequested) {
     	outputSocketsList->clear();
     	for(auto s : *socketsList) {
-    		if(s->listenSocket()) {
-    			s->events(POLLIN);
-    			s->revents(0);
-    		}
+    		s->pollForRead();
     	}
     	dsockets::ErrorType errorType = socketsPoller->pollSockets(socketsList,outputSocketsList);
     	if(errorType == dsockets::ErrorType::NONE) {

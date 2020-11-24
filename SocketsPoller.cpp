@@ -37,7 +37,10 @@ ErrorType SocketsPollerImpl::pollSockets(const SocketsList::Ptr inputSockets, So
     	pollInfo[index].fd = socket->descriptor();
     	pollInfo[index].events = socket->events();
     	pollInfo[index].revents = 0;
-    	socket->revents(0);
+    	// Reset requested input events bits.
+    	socket->events(Socket::NO_EVENTS);
+    	// Reset output events bits.
+    	socket->revents(Socket::NO_EVENTS);
     	index++;
     }
 

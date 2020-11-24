@@ -70,7 +70,7 @@ bool processConfig(char *bufferConfig, size_t bufferSize)
 }
 
 /**
- * @brief Try to receive client TCP socket from UNIX socket. Read configuration.
+ * @brief Try to receive client TCP socket from the UNIX socket. Read configuration.
  * @details When the listener process send to us the connected
  * TCP socket we received it from the UNIX socket and put it to
  * sockets list. Received factory implements the all the stuff which
@@ -87,8 +87,8 @@ bool dispatcherProcess(
 		dsockets::utility::SocketFactory::Ptr receivedTcpSocketFactory,
 		dsockets::SocketsList::Ptr socketsList
 		) {
-	if( unixSocket->revents() == POLLHUP ) {
-        fprintf(stderr,"ERROR: parent has disconnected from us UNIX socket, exiting...\n");
+	if( unixSocket->isDropped() ) {
+        fprintf(stderr,"ERROR: parent has disconnected from our UNIX socket, exiting...\n");
 		return false;
 	}
     std::cout << "dispatcher UNIX socket activity!" << std::endl;
@@ -112,7 +112,7 @@ bool dispatcherProcess(
             dsockets::utils::write(clientSslSocket,"FAILED BUSY TRY LATER!!!!\n");
 			std::cerr << "FAILED: put socket: max size reached!" << std::endl;
 		}
-		clientSslSocket->events(POLLOUT);
+		clientSslSocket->pollForWrite();
 		clientSslSocket->clientStatus(dsockets::ClientStatus::HELLO);
 	} else if( memcmp(message,"CONFIG",6) == 0 ) {
 		char configBuffer[4096];
@@ -133,36 +133,11 @@ bool dispatcherProcess(
 }
 
 
-bool testSocketForDrop(dsockets::Socket::Ptr clientSocket) {
-    if( (clientSocket->revents() & POLLERR) ||
-        (clientSocket->revents() & POLLHUP) ||
-		(clientSocket->revents() & POLLNVAL)||
-        (clientSocket->revents() & POLLRDHUP)) {
-    	return true;
-    }
-	return false;
-}
-
-bool testSocketForRead(dsockets::Socket::Ptr clientSocket) {
-	if( clientSocket->revents() & POLLIN ) {
-		return true;
-	}
-	return false;
-}
-
-bool testSocketForWrite(dsockets::Socket::Ptr clientSocket) {
-	if( clientSocket->revents() & POLLOUT ) {
-		return true;
-	}
-	return false;
-}
-
-
 bool processClient(dsockets::Socket::Ptr clientSocket) {
-    if( testSocketForDrop(clientSocket) ) {
+    if( clientSocket->isDropped() ) {
     	return false;
     }
-    if( testSocketForRead(clientSocket) ) {
+    if( clientSocket->isReadAvailable() ) {
         char buffer[100];
         ssize_t bytes = dsockets::utils::read(clientSocket, buffer, 100, 0);
         std::cerr << "dsockets::utils::read returns: " << bytes << std::endl;
@@ -186,7 +161,7 @@ bool processClient(dsockets::Socket::Ptr clientSocket) {
 			return false;
 		}
     }
-    if( testSocketForWrite(clientSocket) ) {
+    if( clientSocket->isWriteAvailable() ) {
         ssize_t bytes = 0;
         if( clientSocket->clientStatus() == dsockets::ClientStatus::HELLO ) {
         	bytes = dsockets::utils::write(clientSocket, "HELLO!!!!\n" );
@@ -205,7 +180,6 @@ bool processClient(dsockets::Socket::Ptr clientSocket) {
             return false;
         } else {
             printf("write to client socket: %d bytes\n",bytes);
-            clientSocket->events(POLLIN);
             // Wait for client send command.
         }
     }
@@ -244,9 +218,14 @@ try {
 	bool dispatcherFailed = false;
     dsockets::SocketsList::Ptr reSocketsList = std::make_shared<dsockets::SocketsList>(MAX_SOCKETS);
     while(!dispatcherFailed) {
-    	unixSocket->events(POLLIN);
+    	unixSocket->pollForRead();
 
     	reSocketsList->clear();
+    	for( auto s : *socketsList ) {
+    		if(s->socketType() != dsockets::SocketType::UNIX ) {
+    			s->pollForRead();
+    		}
+    	}
     	dsockets::ErrorType errorType = socketsPoller->pollSockets( socketsList, reSocketsList );
 
         if( errorType == dsockets::ErrorType::NONE ) {
