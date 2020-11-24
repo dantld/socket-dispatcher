@@ -1,25 +1,23 @@
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
-#include <assert.h>
-#include <fcntl.h>
 #include <poll.h>
 
 #include <iostream>
 
 #include "utils.h"
 
+#include "SslSocket.h"
+#include "SocketUtils.h"
 #include "SocketFactory.h"
 #include "SocketsPoller.h"
+#include "InitSsl.h"
+#include "ApplicationConfig.h"
+
+ApplicationConfig::Ptr appCfg;
 
 const size_t MAX_SOCKETS = 10;
 
@@ -27,6 +25,52 @@ const size_t MAX_SOCKETS = 10;
 void sig_int_handler(int)
 {
     printf("SIGINT\n");
+}
+
+void retrieveConfigOption(const char* configLine)
+{
+#define CONFIGPID "CONFIGPPID="
+#define CAFILE    "CAFILE="
+#define CERTFILE  "CERTFILE="
+#define KEYFILE   "KEYFILE="
+	if(       memcmp(configLine, CONFIGPID, sizeof(CONFIGPID)-1) == 0 ) {
+		/// TODO: need to store parent PID.
+	} else if(memcmp(configLine, CAFILE,    sizeof(CAFILE)-1)    == 0 ) {
+		appCfg->setCaFile(configLine+sizeof(CAFILE)-1);
+	} else if(memcmp(configLine, CERTFILE,  sizeof(CERTFILE)-1)  == 0)  {
+		appCfg->setCertFile(configLine+sizeof(CERTFILE)-1);
+	} else if(memcmp(configLine, KEYFILE,  sizeof(KEYFILE)-1)    == 0)  {
+		appCfg->setKeyFile(configLine+sizeof(KEYFILE)-1);
+	}
+#undef CONFIGPID
+#undef CAFILE
+#undef CERTFILE
+#undef KEYFILE
+}
+
+bool processConfig(char *bufferConfig, size_t bufferSize)
+{
+	char lineBuffer[256];
+	const char *startPointer = bufferConfig;
+	const char *endPointer = bufferConfig;
+	while( (endPointer - bufferConfig) < bufferSize ) {
+		if(*endPointer != '\n') {
+			endPointer++;
+			continue;
+		}
+		memcpy(lineBuffer,startPointer,endPointer-startPointer);
+		lineBuffer[endPointer-startPointer] = 0;
+		retrieveConfigOption(lineBuffer);
+
+		startPointer = ++endPointer;
+	}
+
+	if(dsockets::ssl::createContext(appCfg->getCaFile(), appCfg->getCertFile(), appCfg->getKeyFile(), "1q2w3e4r")) {
+		std::cerr << "SSL create context failed." << std::endl;
+		return false;
+	}
+
+	return true;
 }
 
 bool dispatcherProcess(
@@ -53,16 +97,24 @@ bool dispatcherProcess(
 			std::cerr << "FAILED: client socket received failed." << std::endl;
 			return false;
 		}
+		dsockets::Socket::Ptr clientSslSocket = std::make_shared<dsockets::SslSocket>(clientSocket);
 		std::cout << "INFO: client socket has received." << std::endl;
-		if(!socketsList->putSocket(clientSocket)) {
-            write(clientSocket->descriptor(),"FAILED BUSY TRY LATER!!!!\n",25);
+		if(!socketsList->putSocket(clientSslSocket)) {
+            dsockets::utils::write(clientSocket,"FAILED BUSY TRY LATER!!!!\n");
 			std::cerr << "FAILED: put socket: max size reached!" << std::endl;
 		}
 		clientSocket->events(POLLOUT);
 		clientSocket->clientStatus(dsockets::ClientStatus::HELLO);
 	} else if( memcmp(message,"CONFIG",6) == 0 ) {
-		ssize_t read_size = recv(unixSocket->descriptor(), message, 200, 0);
+		char configBuffer[4096];
+		ssize_t read_size = recv(unixSocket->descriptor(), configBuffer, sizeof(configBuffer), 0);
+		if(read_size < 0) {
+			fprintf(stderr, "Read config failed\n");
+			return false;
+		}
 		printf("INFO: Dispatcher has received configuration read size = %ld\n", read_size);
+		printf("\n%.*s\n", read_size, configBuffer );
+		return processConfig( configBuffer, static_cast<size_t>(read_size) );
 	} else if( memcmp(message,"EXIT",4) == 0 ) {
 		printf("INFO: Dispatcher has received EXIT request = %ld\n", read_size);
 		return false;
@@ -103,7 +155,7 @@ bool processClient(dsockets::Socket::Ptr clientSocket) {
     }
     if( testSocketForRead(clientSocket) ) {
         char buffer[100];
-        ssize_t r = recv(clientSocket->descriptor(), buffer, 100, 0);
+        ssize_t r = dsockets::utils::read(clientSocket, buffer, 100, 0);
 		if( r == 0 ) {
 			// Typical client drop the connection.
 			// Try to write bytes to socket.
@@ -125,13 +177,13 @@ bool processClient(dsockets::Socket::Ptr clientSocket) {
     if( testSocketForWrite(clientSocket) ) {
         ssize_t r = 0;
         if( clientSocket->clientStatus() == dsockets::ClientStatus::HELLO ) {
-            r = write(clientSocket->descriptor(), "HELLO!!!!\n", 10 );
+            r = dsockets::utils::write(clientSocket, "HELLO!!!!\n" );
             // Switch to next mode ECHO.
             clientSocket->clientStatus(dsockets::ClientStatus::ECHO);
         } else if( clientSocket->clientStatus() == dsockets::ClientStatus::ECHO ) {
-            r = write(clientSocket->descriptor(), "ECHOO!!!!\n", 10 );
+            r = dsockets::utils::write(clientSocket, "ECHOO!!!!\n");
         } else if( clientSocket->clientStatus() == dsockets::ClientStatus::BYE ) {
-            r = write(clientSocket->descriptor(), "BYE...\n", 7 );
+            r = dsockets::utils::write(clientSocket, "BYE...\n" );
             shutdown(clientSocket->descriptor(),SHUT_RDWR);
             return false;
         }
@@ -150,7 +202,9 @@ bool processClient(dsockets::Socket::Ptr clientSocket) {
 
 
 int main(int argc, char *argv[])
-{
+try {
+	appCfg = ApplicationConfig::create(ApplicationType::DISPATCHER);
+
     if( argc != 2 ) {
         fprintf(stderr, "Dispatcher started without argument, exiting...\n");
         return 0;
@@ -191,7 +245,8 @@ int main(int argc, char *argv[])
 						dispatcherFailed = true;
 						break;
 					}
-				} else if(s->socketType() == dsockets::SocketType::TCP) {
+				} else if(s->socketType() == dsockets::SocketType::TCP ||
+						  s->socketType() == dsockets::SocketType::SSL) {
 					if(!processClient(s)) {
 				    	std::cerr << "WARNING: client dropped." << std::endl;
 						if( !socketsList->delSocket(s) ) {
@@ -210,4 +265,7 @@ int main(int argc, char *argv[])
 
     printf("Exit\n");
     return 0;
+} catch(const std::exception &e) {
+	std::cerr << "Exception: " << e.what() << std::endl;
+	return 13;
 }

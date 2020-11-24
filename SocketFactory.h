@@ -25,7 +25,9 @@ public:
 SocketFactory::Ptr createUnixSocketFactory(const std::string& path);
 SocketFactory::Ptr createUnixListenerSocketFactory(const std::string& path);
 SocketFactory::Ptr createTcpListenerSocketFactory(std::uint16_t port, std::uint16_t queueLength = 32);
+SocketFactory::Ptr createTcpSslListenerSocketFactory(std::uint16_t port, std::uint16_t queueLength = 32);
 SocketFactory::Ptr createReceivedTcpSocketFactory(Socket::Ptr unixSocket);
+SocketFactory::Ptr createTcpSslConnectSocketFactory(const std::string& host, std::uint16_t port);
 
 } // end name space utility
 } // end name space socket

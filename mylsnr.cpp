@@ -3,27 +3,18 @@
  * Must drop using xined service for some my legacy services.
  */
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <sys/wait.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <unistd.h>
-#include <signal.h>
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <assert.h>
-#include <fcntl.h>
 #include <poll.h>
 
 #include <iostream>
 #include "SocketFactory.h"
 #include "SocketsPoller.h"
+#include "SocketUtils.h"
+#include "InitSsl.h"
+#include "ApplicationConfig.h"
 
+ApplicationConfig::Ptr appCfg;
 const char *MY_SOCK_PATH = "dispatch.sock";
 static bool exitRequested = false;
 
@@ -87,10 +78,30 @@ bool processDispatcherConnection(
         return false;
     }
     socketsList->putSocket(dispatcherConnection);
-    char buffer[128];
-    int r = snprintf(buffer,128,"CONFIG:PPID=%d\n",(int)getpid());
-    assert(r<128);
-    write( dispatcherConnection->descriptor(), buffer, r );
+    ssize_t bytes = write( dispatcherConnection->descriptor(), "CONFIG", 6 );
+    if(bytes < 0) {
+        fprintf(stderr,"Send config label to dispatcher failed, exiting...\n");
+        return false;
+    }
+
+    char configBuffer[4096];
+    int r = snprintf(configBuffer,sizeof(configBuffer),
+    		"PPID=%d\n"
+    		"CAFILE=%s\n"
+    		"CERTFILE=%s\n"
+    		"KEYFILE=%s\n"
+    		"",
+    		(int)getpid(),
+			appCfg->getCaFile().c_str(),
+			appCfg->getCertFile().c_str(),
+			appCfg->getKeyFile().c_str()
+			);
+    assert(r<sizeof(configBuffer));
+    bytes = write( dispatcherConnection->descriptor(), configBuffer, r );
+    if(bytes < 0) {
+        fprintf(stderr,"Send config to dispatcher failed, exiting...\n");
+        return false;
+    }
     return true;
 }
 
@@ -124,8 +135,26 @@ void sayGoodbyeToAllDispatchers(
 }
 
 int main(int argc, char *argv[])
-{
-    dsockets::utility::SocketFactory::Ptr tcpListenerSocketFactory = dsockets::utility::createTcpListenerSocketFactory(5555);
+try {
+	std::string cAfile   = "../CA-cert.pem";
+	std::string certFile = "../server-cert.pem";
+	std::string keyFile  = "../server-key.pem";
+
+	appCfg = ApplicationConfig::create(argc, argv, ApplicationType::LISTENER);
+
+	if(!appCfg->isOk()) {
+		std::cerr << "Configuration failed. Load defaults settings." << std::endl;
+		appCfg->setCaFile(cAfile);
+		appCfg->setCertFile(certFile);
+		appCfg->setKeyFile(keyFile);
+	}
+
+	if(dsockets::ssl::createContext(appCfg->getCaFile(), appCfg->getCertFile(), appCfg->getKeyFile(), "1q2w3e4r")) {
+		std::cerr << "SSL create context failed." << std::endl;
+		return 1;
+	}
+
+    dsockets::utility::SocketFactory::Ptr tcpListenerSocketFactory = dsockets::utility::createTcpSslListenerSocketFactory(5555);
     dsockets::utility::SocketFactory::Ptr unixListenerSocketFactory = dsockets::utility::createUnixListenerSocketFactory(MY_SOCK_PATH);
 
     dsockets::Socket::Ptr tcpListenerSocket = tcpListenerSocketFactory->createSocket();
@@ -177,6 +206,9 @@ int main(int argc, char *argv[])
     printf("Done...\n");
 
     return 0;
+} catch(const std::exception& e ) {
+	std::cerr << "exception: " << e.what() << std::endl;
+	return 13;
 }
 
 

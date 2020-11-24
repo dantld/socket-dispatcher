@@ -16,6 +16,7 @@ namespace dsockets {
 
 enum class SocketType : std::uint16_t {
 	TCP,
+	SSL,
 	UNIX,
 	UNKNOWN,
 };
@@ -67,8 +68,5 @@ private:
 	ClientStatus _clientStatus = ClientStatus::NONE;
 };
 
-namespace utils {
-	bool sendSocket(Socket::Ptr socketSender, Socket::Ptr socketToSend);
-}
 } // sockets
 #endif /* SOCKET_H_ */
