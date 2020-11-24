@@ -28,15 +28,13 @@ namespace dsockets {
 namespace utility {
 
 class SslClientSocket : public SslSocket {
-	BIO *_bio;
-	SSL *_ssl;
 public:
 	SslClientSocket(
 			int descriptor,
 			BIO *bio,
 			SSL *ssl
 		) :
-		SslSocket(descriptor,_bio,_ssl)
+		SslSocket(descriptor,bio,ssl)
 	{
 	}
 };

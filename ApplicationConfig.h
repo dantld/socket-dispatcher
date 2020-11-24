@@ -34,6 +34,9 @@ public:
 	virtual void setCertFile(const std::string& certFile) noexcept = 0;
 	virtual void setKeyFile(const std::string& keyFile) noexcept = 0;
 
+	/// @brief Method must read configuration option in form: NAME=VALUE.
+	virtual void retrieveConfigOption(const char* configLine) noexcept = 0;
+
 	using Ptr = std::shared_ptr<ApplicationConfig>;
 
 	static ApplicationConfig::Ptr create(int argc, char *argv[], ApplicationType applicationType);

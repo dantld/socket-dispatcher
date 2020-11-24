@@ -55,11 +55,16 @@ public:
 	inline ClientStatus clientStatus() const noexcept { return _clientStatus; }
 	inline void clientStatus(ClientStatus clientStatus) noexcept { _clientStatus = clientStatus; }
 
+	void protectDescriptor() { _protectDescriptor= true; }
+
 	using Ptr = std::shared_ptr<Socket>;
 
 
 	virtual Ptr acceptConnection();
+protected:
+
 private:
+	bool  _protectDescriptor = false;
 	int   _descriptor;
 	short _events  = NO_EVENTS;
 	short _revents = NO_EVENTS;

@@ -8,10 +8,16 @@
 #include "Socket.h"
 #include <unistd.h>
 
+#include <iostream>
+
 namespace dsockets {
 
 Socket::~Socket() {
-	close(_descriptor);
+	if(!_protectDescriptor) {
+		std::cerr << "Socket::~Socket closing descriptor." << std::endl;
+		close(_descriptor);
+	}
+	std::cerr << "Socket::~Socket( " << _descriptor << ", " << static_cast<int>(_socketType) << " )" << std::endl;
 }
 
 Socket::Ptr Socket::acceptConnection() {

@@ -1,7 +1,8 @@
 
 project(server)
 
-set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} -ggdb)
+#set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} "-ggdb")
+set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} "-ggdb -fsanitize=address -fno-omit-frame-pointer")
 
 add_executable(mylsnr
 	mylsnr.cpp

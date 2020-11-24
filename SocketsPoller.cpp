@@ -61,7 +61,7 @@ ErrorType SocketsPollerImpl::pollSockets(const SocketsList::Ptr inputSockets, So
         	index++;
         	continue;
         }
-        //printf("check clients socket [%d:%d:0x%0X] \n", pollInfo[index].fd, socket->socketType(), pollInfo[index].revents);
+        printf("check clients socket [%d:%d:0x%0X] \n", pollInfo[index].fd, socket->socketType(), pollInfo[index].revents);
     	socket->revents(pollInfo[index].revents);
     	index++;
     	outputSockets->putSocket(socket);

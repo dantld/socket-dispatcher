@@ -7,6 +7,7 @@
 
 #include "ApplicationConfig.h"
 #include <getopt.h>
+#include <string.h>
 
 class ApplicationConfigImpl : public ApplicationConfig
 {
@@ -43,7 +44,30 @@ public:
 	void setCertFile(const std::string& certFile) noexcept override { _certFile = certFile; }
 	void setKeyFile(const std::string& keyFile) noexcept override { _keyFile = keyFile; }
 
+	void retrieveConfigOption(const char* configLine) noexcept override;
+
 };
+
+void ApplicationConfigImpl::retrieveConfigOption(const char* configLine) noexcept
+{
+#define CONFIGPID "CONFIGPPID="
+#define CAFILE    "CAFILE="
+#define CERTFILE  "CERTFILE="
+#define KEYFILE   "KEYFILE="
+	if(       memcmp(configLine, CONFIGPID, sizeof(CONFIGPID)-1) == 0 ) {
+		/// TODO: need to store parent PID.
+	} else if(memcmp(configLine, CAFILE,    sizeof(CAFILE)-1)    == 0 ) {
+		setCaFile(configLine+sizeof(CAFILE)-1);
+	} else if(memcmp(configLine, CERTFILE,  sizeof(CERTFILE)-1)  == 0)  {
+		setCertFile(configLine+sizeof(CERTFILE)-1);
+	} else if(memcmp(configLine, KEYFILE,  sizeof(KEYFILE)-1)    == 0)  {
+		setKeyFile(configLine+sizeof(KEYFILE)-1);
+	}
+#undef CONFIGPID
+#undef CAFILE
+#undef CERTFILE
+#undef KEYFILE
+}
 
 void ApplicationConfigImpl::readCommandArguments(int argc, char *argv[])
 {

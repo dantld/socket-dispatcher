@@ -17,6 +17,12 @@
 #include "InitSsl.h"
 #include "ApplicationConfig.h"
 
+/**
+ * @brief Application configuration global instance.
+ * @details Due dispatcher application couldn't read all data at the start
+ * and some data can be dynamically sent by parent process the global instance
+ * is a best place for application configuration instance.
+ */
 ApplicationConfig::Ptr appCfg;
 
 const size_t MAX_SOCKETS = 10;
@@ -27,27 +33,17 @@ void sig_int_handler(int)
     printf("SIGINT\n");
 }
 
-void retrieveConfigOption(const char* configLine)
+void sig_pipe_handler(int)
 {
-#define CONFIGPID "CONFIGPPID="
-#define CAFILE    "CAFILE="
-#define CERTFILE  "CERTFILE="
-#define KEYFILE   "KEYFILE="
-	if(       memcmp(configLine, CONFIGPID, sizeof(CONFIGPID)-1) == 0 ) {
-		/// TODO: need to store parent PID.
-	} else if(memcmp(configLine, CAFILE,    sizeof(CAFILE)-1)    == 0 ) {
-		appCfg->setCaFile(configLine+sizeof(CAFILE)-1);
-	} else if(memcmp(configLine, CERTFILE,  sizeof(CERTFILE)-1)  == 0)  {
-		appCfg->setCertFile(configLine+sizeof(CERTFILE)-1);
-	} else if(memcmp(configLine, KEYFILE,  sizeof(KEYFILE)-1)    == 0)  {
-		appCfg->setKeyFile(configLine+sizeof(KEYFILE)-1);
-	}
-#undef CONFIGPID
-#undef CAFILE
-#undef CERTFILE
-#undef KEYFILE
+    printf("SIGPIPE\n");
 }
 
+/**
+ * @brief Process configuration received from parent process.
+ * @param bufferConfig buffer with configuration.
+ * @param bufferSize buffer size.
+ * @return true if configuration has successfully parsed and read out.
+ */
 bool processConfig(char *bufferConfig, size_t bufferSize)
 {
 	char lineBuffer[256];
@@ -60,7 +56,7 @@ bool processConfig(char *bufferConfig, size_t bufferSize)
 		}
 		memcpy(lineBuffer,startPointer,endPointer-startPointer);
 		lineBuffer[endPointer-startPointer] = 0;
-		retrieveConfigOption(lineBuffer);
+		appCfg->retrieveConfigOption(lineBuffer);
 
 		startPointer = ++endPointer;
 	}
@@ -73,13 +69,26 @@ bool processConfig(char *bufferConfig, size_t bufferSize)
 	return true;
 }
 
+/**
+ * @brief Try to receive client TCP socket from UNIX socket. Read configuration.
+ * @details When the listener process send to us the connected
+ * TCP socket we received it from the UNIX socket and put it to
+ * sockets list. Received factory implements the all the stuff which
+ * can help to us create socket from data received from UNIX socket.
+ * Also parent process sent to us configuration through the UNIX socket and
+ * we need read out received configuration data. Configuration data saved in
+ * a global application configuration instance @appCfg.
+ * @param [in] unixSocket source socket which receive the socket from listener.
+ * @param [in] receivedTcpSocketFactory factory which retrieves file descriptor from UNIX socket.
+ * @param [in] socketsList destination list where received socket will be putted.
+ */
 bool dispatcherProcess(
 		dsockets::Socket::Ptr unixSocket,
 		dsockets::utility::SocketFactory::Ptr receivedTcpSocketFactory,
 		dsockets::SocketsList::Ptr socketsList
 		) {
 	if( unixSocket->revents() == POLLHUP ) {
-        fprintf(stderr,"ERROR: parent has disconnected from our unix socket, exiting...\n");
+        fprintf(stderr,"ERROR: parent has disconnected from us UNIX socket, exiting...\n");
 		return false;
 	}
     std::cout << "dispatcher UNIX socket activity!" << std::endl;
@@ -97,14 +106,14 @@ bool dispatcherProcess(
 			std::cerr << "FAILED: client socket received failed." << std::endl;
 			return false;
 		}
-		dsockets::Socket::Ptr clientSslSocket = std::make_shared<dsockets::SslSocket>(clientSocket);
+		dsockets::Socket::Ptr clientSslSocket = std::make_shared<dsockets::SslSocket>(std::move(clientSocket));
 		std::cout << "INFO: client socket has received." << std::endl;
 		if(!socketsList->putSocket(clientSslSocket)) {
-            dsockets::utils::write(clientSocket,"FAILED BUSY TRY LATER!!!!\n");
+            dsockets::utils::write(clientSslSocket,"FAILED BUSY TRY LATER!!!!\n");
 			std::cerr << "FAILED: put socket: max size reached!" << std::endl;
 		}
-		clientSocket->events(POLLOUT);
-		clientSocket->clientStatus(dsockets::ClientStatus::HELLO);
+		clientSslSocket->events(POLLOUT);
+		clientSslSocket->clientStatus(dsockets::ClientStatus::HELLO);
 	} else if( memcmp(message,"CONFIG",6) == 0 ) {
 		char configBuffer[4096];
 		ssize_t read_size = recv(unixSocket->descriptor(), configBuffer, sizeof(configBuffer), 0);
@@ -155,44 +164,47 @@ bool processClient(dsockets::Socket::Ptr clientSocket) {
     }
     if( testSocketForRead(clientSocket) ) {
         char buffer[100];
-        ssize_t r = dsockets::utils::read(clientSocket, buffer, 100, 0);
-		if( r == 0 ) {
-			// Typical client drop the connection.
+        ssize_t bytes = dsockets::utils::read(clientSocket, buffer, 100, 0);
+        std::cerr << "dsockets::utils::read returns: " << bytes << std::endl;
+		if( bytes == 0 ) {
+			// Typical the client drop the connection.
 			// Try to write bytes to socket.
 			// Check on the next cycle what we have.
 			// We will expect the POLLERR and POLLHUP.
-			r = write(clientSocket->descriptor(), "EXIT\n", 5 );
-			if( r < 0 ) {
+			bytes = dsockets::utils::write(clientSocket, "EXIT\n" );
+			if( bytes < 0 ) {
 				printf("client socket error, read (test write) failed:\n");
 				return false;
 			}
-		} else if(r > 0) {
-			printf("client reading socket: %d\n",r);
+		} else if(bytes > 0) {
+			printf("client reading socket: %d\n",bytes);
 			if( memcmp(buffer,"EXIT",4) == 0) {
 				clientSocket->clientStatus(dsockets::ClientStatus::BYE);
 			}
 			clientSocket->revents(POLLOUT);
+		} else {
+			return false;
 		}
     }
     if( testSocketForWrite(clientSocket) ) {
-        ssize_t r = 0;
+        ssize_t bytes = 0;
         if( clientSocket->clientStatus() == dsockets::ClientStatus::HELLO ) {
-            r = dsockets::utils::write(clientSocket, "HELLO!!!!\n" );
+        	bytes = dsockets::utils::write(clientSocket, "HELLO!!!!\n" );
             // Switch to next mode ECHO.
             clientSocket->clientStatus(dsockets::ClientStatus::ECHO);
         } else if( clientSocket->clientStatus() == dsockets::ClientStatus::ECHO ) {
-            r = dsockets::utils::write(clientSocket, "ECHOO!!!!\n");
+        	bytes = dsockets::utils::write(clientSocket, "ECHOO!!!!\n");
         } else if( clientSocket->clientStatus() == dsockets::ClientStatus::BYE ) {
-            r = dsockets::utils::write(clientSocket, "BYE...\n" );
-            shutdown(clientSocket->descriptor(),SHUT_RDWR);
+        	bytes = dsockets::utils::write(clientSocket, "BYE...\n" );
+            //shutdown(clientSocket->descriptor(),SHUT_RDWR);
             return false;
         }
-        if( r == -1 ) {
+        if( bytes == -1 ) {
             fprintf(stderr, "write to client socket failed, drop connection: [%d] \"%s\"\n",errno,strerror(errno));
-            shutdown(clientSocket->descriptor(),SHUT_RDWR);
+            //shutdown(clientSocket->descriptor(),SHUT_RDWR);
             return false;
         } else {
-            printf("write to client socket: %d bytes\n",r);
+            printf("write to client socket: %d bytes\n",bytes);
             clientSocket->events(POLLIN);
             // Wait for client send command.
         }
@@ -227,14 +239,15 @@ try {
 	socketsList->putSocket(unixSocket);
 
     signal(SIGINT,sig_int_handler);
+    signal(SIGPIPE,sig_pipe_handler);
 
 	bool dispatcherFailed = false;
+    dsockets::SocketsList::Ptr reSocketsList = std::make_shared<dsockets::SocketsList>(MAX_SOCKETS);
     while(!dispatcherFailed) {
     	unixSocket->events(POLLIN);
-    	/// TODO: need variant for create sockets list on a stack!
-    	///       Bad design: always allocate object at heap.
-        dsockets::SocketsList::Ptr reSocketsList = std::make_shared<dsockets::SocketsList>(MAX_SOCKETS);
-        dsockets::ErrorType errorType = socketsPoller->pollSockets( socketsList, reSocketsList );
+
+    	reSocketsList->clear();
+    	dsockets::ErrorType errorType = socketsPoller->pollSockets( socketsList, reSocketsList );
 
         if( errorType == dsockets::ErrorType::NONE ) {
 			for( const auto s : *reSocketsList ) {
