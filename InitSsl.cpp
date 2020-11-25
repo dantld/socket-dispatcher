@@ -130,5 +130,17 @@ int createClientContext()
 	return sslError;
 }
 
+void dropContext()
+{
+	if(!sslGlobalCtx) {
+		return;
+	}
+	SSL_CTX_free(sslGlobalCtx);
+	sslGlobalCtx = nullptr;
+	ERR_free_strings();
+	EVP_cleanup();
+	CRYPTO_cleanup_all_ex_data();
+}
+
 } // ssl
 } // dsockets

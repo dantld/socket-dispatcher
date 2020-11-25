@@ -4,7 +4,7 @@ project(server)
 
 set(CMAKE_CXX_FLAGS_DEBUG "-Wall -Wpedantic -Werror -ggdb")
 set(CMAKE_CXX_FLAGS_RELEASE "-Wall -Wpedantic -Werror")
-#set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} "-ggdb -fsanitize=address -fno-omit-frame-pointer")
+set(CMAKE_CXX_FLAGS_SANITIZE "-Wall -Wpedantic -Werror -ggdb -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined")
 
 find_package(OpenSSL REQUIRED)
 

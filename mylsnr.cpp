@@ -200,6 +200,8 @@ try {
     sleep(2);
     wait_disp_child();
 
+    dsockets::ssl::dropContext();
+
     printf("Done...\n");
 
     return 0;

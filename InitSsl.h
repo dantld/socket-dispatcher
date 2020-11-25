@@ -28,6 +28,8 @@ int createContext(
 
 int createClientContext();
 
+void dropContext();
+
 }
 }
 
