@@ -10,6 +10,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <stdio.h>
+#include <errno.h>
 #include "utils.h"
 
 namespace dsockets {

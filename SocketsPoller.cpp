@@ -9,6 +9,8 @@
 
 #include <poll.h>
 #include <string.h>
+#include <errno.h>
+#include <stdio.h>
 
 namespace dsockets {
 
