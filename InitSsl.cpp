@@ -73,7 +73,7 @@ int createContext(
 		sslError = ERR_get_error();
 		ERR_error_string(errorCode, errorTextBuffer);
 		fprintf(stderr,"Can’t read certificate file\"%s\": %s\n", crtFile.c_str(), errorTextBuffer);
-		SSL_CTX_SRP_CTX_free(sslGlobalCtx);
+		SSL_CTX_free(sslGlobalCtx);
 		sslGlobalCtx = nullptr;
 		return sslError;
 	}
@@ -86,7 +86,7 @@ int createContext(
 		sslError = ERR_get_error();
 		ERR_error_string(errorCode, errorTextBuffer);
 		fprintf(stderr,"Can’t read key file \"%s\": %s\n", keyFile.c_str(), errorTextBuffer);
-		SSL_CTX_SRP_CTX_free(sslGlobalCtx);
+		SSL_CTX_free(sslGlobalCtx);
 		sslGlobalCtx = nullptr;
 		return sslError;
 	}
@@ -97,7 +97,7 @@ int createContext(
 		sslError = ERR_get_error();
 		ERR_error_string(errorCode, errorTextBuffer);
 		fprintf(stderr,"Can’t read CA list \"%s\": %s\n", caFile.c_str(), errorTextBuffer);
-		SSL_CTX_SRP_CTX_free(sslGlobalCtx);
+		SSL_CTX_free(sslGlobalCtx);
 		sslGlobalCtx = nullptr;
 		return sslError;
 	}
