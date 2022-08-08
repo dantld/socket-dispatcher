@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <malloc.h>
 #include <errno.h>
+#include "utils.h"
 
 namespace dsockets {
 namespace utility {
@@ -40,11 +41,6 @@ public:
 	{}
 	Socket::Ptr createSocket() override;
 };
-
-
-#define err_sys(msg)  fprintf(stderr,"ERROR:  %s\n",msg)
-#define err_ret(msg)  fprintf(stderr,"RETURN: %s\n",msg)
-#define err_dump(msg) fprintf(stderr,"DUMP:   %s\n",msg)
 
 
 Socket::Ptr ReceivedTcpSocketFactory::createSocket()
@@ -72,9 +68,9 @@ Socket::Ptr ReceivedTcpSocketFactory::createSocket()
        msg.msg_control    = cmptr;
        msg.msg_controllen = CONTROLLEN;
        if ((nr = recvmsg(_unixSocket->descriptor(), &msg, 0)) < 0) {
-           err_sys("recvmsg error");
+           logger->error("recvmsg error");
        } else if (nr == 0) {
-           err_ret("connection closed by server");
+           logger->error("connection closed by server");
            return {};
        }
        /*
@@ -85,11 +81,11 @@ Socket::Ptr ReceivedTcpSocketFactory::createSocket()
        for (ptr = buf; ptr < &buf[nr]; ) {
            if (*ptr++ == 0) {
                if (ptr != &buf[nr-1])
-                   err_dump("message format error");
+                   logger->error("message format error");
                status = *ptr & 0xFF;  /* prevent sign extension */
                if (status == 0) {
                    if (msg.msg_controllen != CONTROLLEN)
-                       err_dump("status = 0 but no fd");
+                       logger->error("status = 0 but no fd");
                    newfd = *(int *)CMSG_DATA(cmptr);
                } else {
                    newfd = -status;

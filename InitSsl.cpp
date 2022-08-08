@@ -21,6 +21,7 @@
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <iostream>
+#include "utils.h"
 
 namespace dsockets {
 namespace ssl {
@@ -33,13 +34,11 @@ namespace {
 	std::string keyFilePassword;
 	int pass_user_password_cb(char *buf, int size, int rwflag, void *userdata)
 	{
-		std::cout << "IN pass_user_password_cb: \""
-				<< keyFilePassword
-				<< "\" data size="
-				<< keyFilePassword.size()
-				<< " try to open file: "
-				<< (const char*)userdata
-				<< std::endl;
+		logger->debug(
+			"IN pass_user_password_cb: \"{}\" data size={} try to open file: {}",
+			keyFilePassword,
+			keyFilePassword.size(),
+			(const char*)userdata);
 		if(size > 0 && keyFilePassword.size() > static_cast<size_t>(size)) {
 			return 0;
 		}
@@ -81,7 +80,7 @@ int createContext(
 	if(errorCode != 1) {
 		sslError = ERR_get_error();
 		ERR_error_string(errorCode, errorTextBuffer);
-		fprintf(stderr,"Can’t read certificate file\"%s\": %s\n", crtFile.c_str(), errorTextBuffer);
+		logger->error("Can’t read certificate file \"{}\": {}", crtFile.c_str(), errorTextBuffer);
 		SSL_CTX_free(sslGlobalCtx);
 		sslGlobalCtx = nullptr;
 		return sslError;
@@ -94,7 +93,7 @@ int createContext(
 	if(errorCode != 1) {
 		sslError = ERR_get_error();
 		ERR_error_string(errorCode, errorTextBuffer);
-		fprintf(stderr,"Can’t read key file \"%s\": %s\n", keyFile.c_str(), errorTextBuffer);
+		logger->error("Can’t read key file \"{}\": {}", keyFile.c_str(), errorTextBuffer);
 		SSL_CTX_free(sslGlobalCtx);
 		sslGlobalCtx = nullptr;
 		return sslError;
@@ -105,7 +104,7 @@ int createContext(
 	if(errorCode != 1) {
 		sslError = ERR_get_error();
 		ERR_error_string(errorCode, errorTextBuffer);
-		fprintf(stderr,"Can’t read CA list \"%s\": %s\n", caFile.c_str(), errorTextBuffer);
+		logger->error("Can’t read CA list \"{}\": {}\n", caFile.c_str(), errorTextBuffer);
 		SSL_CTX_free(sslGlobalCtx);
 		sslGlobalCtx = nullptr;
 		return sslError;

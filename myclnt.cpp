@@ -18,18 +18,19 @@
 #include "SocketFactory.h"
 #include "SocketUtils.h"
 #include "InitSsl.h"
-
+#include "utils.h"
 #include <string>
 #include <stdexcept>
 #include <iostream>
 
 int main(int argc, char *argv[])
 try {
+	create_logger("client");
 	dsockets::ssl::createClientContext();
 	dsockets::utility::SocketFactory::Ptr socketFactory = dsockets::utility::createTcpSslConnectSocketFactory("localhost", 5555);
 	dsockets::Socket::Ptr clientSocket = socketFactory->createSocket();
 	if(!clientSocket) {
-		std::cerr << "connect failed." << std::endl;
+		logger->critical("connect failed.");
 		return 1;
 	}
 	while(true) {
@@ -40,14 +41,14 @@ try {
 		}
 		std::string userInputLine;
 		std::cin >> userInputLine;
-		dsockets::utils::write(clientSocket,userInputLine);
 		if(userInputLine.empty()) {
 			dsockets::utils::write(clientSocket,"EXIT");
 			break;
 		}
+		dsockets::utils::write(clientSocket,userInputLine);
 	}
 	return 0;
 } catch(const std::exception &e) {
-	std::cerr << "Exception: " << e.what() << std::endl;
-	return 13;
+	logger->critical("Exception: {}", e.what());
+	return 1;
 }

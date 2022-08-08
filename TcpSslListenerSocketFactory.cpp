@@ -49,16 +49,16 @@ public:
 	    socklen_t peer_size = sizeof(peer_addr);
 	    newfd = accept(descriptor(),(sockaddr*)&peer_addr,&peer_size);
 	    if( newfd < 0 ) {
-	        fprintf(stderr,"accept failed: %s\n", strerror(errno));
+	        logger->error("accept failed: {}", strerror(errno));
 	        return {};
 	    }
-	    printf("Incoming Tcp SSL Connection Has Accepted\n");
+	    logger->info("Incoming Tcp SSL Connection Has Accepted");
 		BIO *sbio = BIO_new_socket(newfd, BIO_NOCLOSE);
 		SSL *ssl = SSL_new(_sslCtx);
 		SSL_set_bio(ssl, sbio, sbio);
 		retVal = SSL_accept(ssl);
 		if( retVal <= 0 ) {
-	        fprintf(stderr,"SSL accept error: %d\n", SSL_get_error(ssl,retVal));
+	        logger->error("SSL accept error: {}", SSL_get_error(ssl,retVal));
 	        return {};
 		}
 	    return std::make_shared<Socket>(newfd, SocketType::SSL, false);
@@ -93,7 +93,9 @@ Socket::Ptr TcpSslListenerSocketFactory::createSocket()
 
     int sockopt = 1;
     retVal = setsockopt( socketfd, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof(int) );
-    if( retVal == -1 ) { perror("set reuse address failed"); }
+    if( retVal == -1 ) { 
+		logger->error("set reuse address: {}",strerror(errno));
+	}
 
     retVal = bind( socketfd, (sockaddr*)&srv_addr, sizeof(srv_addr) );
     if(retVal < 0 ) return {};

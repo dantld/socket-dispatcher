@@ -17,6 +17,16 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include "utils.h"
+#include "spdlog/sinks/stdout_color_sinks.h"
+
+std::shared_ptr<spdlog::logger> logger = spdlog::stdout_color_mt("default");
+
+void create_logger(const char* process_name)
+{
+    logger = spdlog::stdout_color_mt(process_name);
+}
+
 
 bool setnonblocking(int sock)
 {

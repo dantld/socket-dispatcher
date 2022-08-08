@@ -20,6 +20,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdio.h>
+#include "utils.h"
 
 namespace dsockets {
 
@@ -61,10 +62,10 @@ ErrorType SocketsPollerImpl::pollSockets(const SocketsList::Ptr inputSockets, So
     if(retVal == -1) {
         error = errno;
         if(error == EINTR) {
-            fprintf(stderr,"dispatch poll interrupted\n");
+            logger->warn("dispatch poll interrupted");
         	return ErrorType::INTERRUPTED;
         }
-        fprintf(stderr,"dispatch child poll failed: [%d] \"%s\"\n", errno, strerror(errno));
+        logger->error("dispatch child poll failed: [{}] \"{}\"\n", errno, strerror(errno));
         return ErrorType::ERROR;
     } else if(retVal == 0) {
         return ErrorType::TIMEOUT;
@@ -76,7 +77,7 @@ ErrorType SocketsPollerImpl::pollSockets(const SocketsList::Ptr inputSockets, So
         	index++;
         	continue;
         }
-        printf("check clients socket [%d:%d:0x%0X] \n", pollInfo[index].fd, static_cast<int>(socket->socketType()), pollInfo[index].revents);
+        logger->info("check clients socket [{}:{}:0x{:X}]", pollInfo[index].fd, static_cast<int>(socket->socketType()), pollInfo[index].revents);
     	socket->revents(pollInfo[index].revents);
     	index++;
     	outputSockets->putSocket(socket);

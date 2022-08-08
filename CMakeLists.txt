@@ -8,6 +8,14 @@ set(CMAKE_CXX_FLAGS_SANITIZE "-Wall -Wpedantic -Werror -ggdb -fsanitize=address 
 
 find_package(OpenSSL REQUIRED)
 
+add_custom_target(
+	spdlog ALL
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/include
+	COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/spdlog/include ${CMAKE_BINARY_DIR}/include
+	)
+
+include_directories(${CMAKE_BINARY_DIR}/include)
+
 add_executable(mylsnr
 	mylsnr.cpp
 	utils.cpp
