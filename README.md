@@ -47,3 +47,16 @@ The remote process,
                               └─────────────────────────────────────────────────────────┘
 
 ```
+
+# Build and run.
+
+```bash
+mkdir build && cd build && cmake ..
+../scripts/genkey.sh
+./mylsnr -a ca-web.crt -c dispatcher.crt -k dispatcher.key -p ./
+```
+
+From another console run the client example.
+```bash
+./myclnt
+```
