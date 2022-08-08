@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0)
 
 project(server)
 
-set(CMAKE_CXX_FLAGS_DEBUG "-ggdb")
+set(CMAKE_CXX_FLAGS_DEBUG "-Wall -Wpedantic -Werror -ggdb")
 set(CMAKE_CXX_FLAGS_RELEASE "-Wall -Wpedantic -Werror")
 set(CMAKE_CXX_FLAGS_SANITIZE "-Wall -Wpedantic -Werror -ggdb -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined")
 

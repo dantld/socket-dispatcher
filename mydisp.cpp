@@ -245,7 +245,7 @@ try {
     	dsockets::ErrorType errorType = socketsPoller->pollSockets( socketsList, reSocketsList );
 
         if( errorType == dsockets::ErrorType::NONE ) {
-			for( const auto s : *reSocketsList ) {
+			for( const auto& s : *reSocketsList ) {
 				//std::cout << "INFO: process re-events sockets list." << std::endl;
 				if(s->socketType() == dsockets::SocketType::UNIX) {
 					std::cout << "INFO: unix socket activity." << std::endl;
