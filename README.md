@@ -1,4 +1,6 @@
 # socket-dispatcher
+
+
 Project shows base example how to use base technique for sending tcp/ip socket to another process
 in Limux system. Also project shows how to make `SSL` connection over `tcp/ip`.
 Disgram below shows simple scheme with clients hosts snd server host.
@@ -48,7 +50,7 @@ The remote process,
 
 ```
 
-# Build and run.
+## Build and run.
 
 ```bash
 mkdir build && cd build && cmake ..
