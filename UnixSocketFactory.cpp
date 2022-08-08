@@ -56,7 +56,7 @@ Socket::Ptr UnixSocketFactory::createSocket()
     size_t len = strlen(my_addr.sun_path) + sizeof(my_addr.sun_family);
     int retVal = connect(sfd, (struct sockaddr *) &my_addr, len);
     if( retVal < 0 ) {
-        fprintf(stderr,"Connect failed: [%s]\n", strerror(errno));
+        logger->error("Connect failed: [{}]", strerror(errno));
         return {};
     }
 

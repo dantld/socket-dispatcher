@@ -17,6 +17,10 @@
 #ifndef __MY__UTILS_H__
 #define __MY__UTILS_H__
 
+#include "spdlog/spdlog.h"
+
 bool setnonblocking(int sock);
+void create_logger(const char* process_name);
+extern std::shared_ptr<spdlog::logger> logger;
 
 #endif //__MY__UTILS_H__

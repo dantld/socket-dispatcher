@@ -44,10 +44,10 @@ public:
 	Socket::Ptr acceptConnection() override {
 	    int new_fd = accept( descriptor(), NULL, NULL);
 	    if (new_fd < 0) {
-	        fprintf(stderr,"accept dispatcher connection failed: %s\n", strerror(errno));
+	        logger->error("accept dispatcher connection failed: {}", strerror(errno));
 	        return {};
 	    }
-	    printf("Dispatcher Connection Has Accepted\n");
+	    logger->info("Dispatcher Connection Has Accepted");
 	    return std::make_shared<Socket>(new_fd, SocketType::UNIX, false);
 	}
 

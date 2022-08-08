@@ -32,6 +32,8 @@
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
 
+#include "utils.h"
+
 namespace dsockets {
 
 namespace utility {
@@ -70,17 +72,17 @@ Socket::Ptr TcpSslConnectSocketFactory::createSocket()
 	int error_number = 0;
 	hostent *hostEntry = gethostbyname(_host.c_str());
 	if(hostEntry == nullptr) {
-		std::cerr << "Host name resolution failed: [" << error_number << "]" << std::endl;
+		logger->error("Host name resolution failed: [{}]", error_number);
 		return {};
 	}
 	if(hostEntry->h_length == 0) {
-		std::cerr << "Host name resolution returns no addresses." << std::endl;
+		logger->error("Host name resolution returns no addresses.");
 		return {};
 	}
-	std::cerr << _host << " -> " << inet_ntoa(*(in_addr*)(hostEntry->h_addr_list[0])) << std::endl;
+	logger->info("{} -> {}",_host,inet_ntoa(*(in_addr*)(hostEntry->h_addr_list[0])));
 	int sockfd = socket(AF_INET, SOCK_STREAM, 0 );
 	if( sockfd == -1 ) {
-		std::cerr << "Socket create error: " << strerror(errno) << std::endl;
+		logger->error("Socket create error: {}", strerror(errno));
 		return {};
 	}
 	sockaddr_in clientAddrIn;
@@ -90,7 +92,7 @@ Socket::Ptr TcpSslConnectSocketFactory::createSocket()
 	clientAddrIn.sin_port = htons(_port);
 	if( connect(sockfd, (sockaddr*)&clientAddrIn, sizeof(clientAddrIn)) != 0) {
 		close(sockfd);
-		std::cerr << "Connect to host \"" << _host << "\" (" << inet_ntoa(*(in_addr*)(hostEntry->h_addr_list[0])) << ") failed." << std::endl;
+		logger->error("Connect to host \"{}\", ({})", _host, inet_ntoa(*(in_addr*)(hostEntry->h_addr_list[0])));
 		return {};
 	}
 	/* Connect the SSL socket */
@@ -101,7 +103,7 @@ Socket::Ptr TcpSslConnectSocketFactory::createSocket()
 		close(sockfd);
 		BIO_free(sbio);
 		SSL_free(ssl);
-		std::cerr << "SSL connect error" << std::endl;
+		logger->error("SSL connect error");
 		return {};
 	}
 	//if(require_server_auth)

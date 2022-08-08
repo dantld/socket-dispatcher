@@ -39,10 +39,10 @@ public:
 	    socklen_t peer_size = sizeof(peer_addr);
 	    newfd = accept(descriptor(),(sockaddr*)&peer_addr,&peer_size);
 	    if( newfd < 0 ) {
-	        fprintf(stderr,"accept failed: %s\n", strerror(errno));
+	        logger->error("accept failed: {}", strerror(errno));
 	        return {};
 	    }
-	    printf("Incoming Tcp Connection Has Accepted\n");
+	    logger->info("Incoming Tcp Connection Has Accepted");
 	    return std::make_shared<Socket>(newfd, SocketType::TCP, false);
 	}
 };
@@ -73,8 +73,9 @@ Socket::Ptr TcpListenerSocketFactory::createSocket()
 
     int sockopt = 1;
     retVal = setsockopt( socketfd, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof(int) );
-    if( retVal == -1 ) { perror("set reuse address failed"); }
-
+    if( retVal == -1 ) { 
+		logger->error("set reuse address: {}", strerror(errno));
+	}
     retVal = bind( socketfd, (sockaddr*)&srv_addr, sizeof(srv_addr) );
     if(retVal < 0 ) return {};
     retVal = listen( socketfd, _queueLength);

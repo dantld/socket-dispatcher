@@ -16,17 +16,17 @@
 
 #include "Socket.h"
 #include <unistd.h>
-
+#include "utils.h"
 #include <iostream>
 
 namespace dsockets {
 
 Socket::~Socket() {
 	if(!_protectDescriptor) {
-		std::cerr << "Socket::~Socket closing descriptor." << std::endl;
+		logger->debug("Socket::~Socket closing descriptor.");
 		close(_descriptor);
 	}
-	std::cerr << "Socket::~Socket( " << _descriptor << ", " << static_cast<int>(_socketType) << " )" << std::endl;
+	logger->debug("Socket::~Socket({},{})", _descriptor, static_cast<int>(_socketType));
 }
 
 Socket::Ptr Socket::acceptConnection() {

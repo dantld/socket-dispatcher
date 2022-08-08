@@ -21,11 +21,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <poll.h>
-
 #include <iostream>
-
 #include "utils.h"
-
 #include "SslSocket.h"
 #include "SocketUtils.h"
 #include "SocketFactory.h"
@@ -46,12 +43,12 @@ const size_t MAX_SOCKETS = 10;
 
 void sig_int_handler(int)
 {
-    printf("SIGINT\n");
+    logger->info("SIGINT\n");
 }
 
 void sig_pipe_handler(int)
 {
-    printf("SIGPIPE\n");
+    logger->info("SIGPIPE\n");
 }
 
 /**
@@ -104,18 +101,18 @@ bool dispatcherProcess(
 		dsockets::SocketsList::Ptr socketsList
 		) {
 	if( unixSocket->isDropped() ) {
-        fprintf(stderr,"ERROR: parent has disconnected from our UNIX socket, exiting...\n");
+        logger->critical("ERROR: parent has disconnected from our UNIX socket, exiting...");
 		return false;
 	}
-    std::cout << "dispatcher UNIX socket activity!" << std::endl;
+    logger->info("dispatcher UNIX socket activity!");
     char message[200];
     ssize_t read_size = recv(unixSocket->descriptor(), message, 200, MSG_PEEK);
     if(!read_size) {
-        fprintf(stderr,"ERROR: read zero bytes from dispatcher socket, exiting...\n");
+        logger->critical("ERROR: read zero bytes from dispatcher socket, exiting...");
         return false;
     }
 
-	std::cout << "INFO: unix socket read " << read_size << " bytes." << std::endl;
+	logger->info("INFO: unix socket read {} bytes", read_size);
 	if(read_size == 2) {
 		dsockets::Socket::Ptr clientSocket = receivedTcpSocketFactory->createSocket();
 		if(!clientSocket) {
@@ -123,10 +120,10 @@ bool dispatcherProcess(
 			return false;
 		}
 		dsockets::Socket::Ptr clientSslSocket = std::make_shared<dsockets::SslSocket>(std::move(clientSocket));
-		std::cout << "INFO: client socket has received." << std::endl;
+		logger->info("client socket has received.");
 		if(!socketsList->putSocket(clientSslSocket)) {
             dsockets::utils::write(clientSslSocket,"FAILED BUSY TRY LATER!!!!\n");
-			std::cerr << "FAILED: put socket: max size reached!" << std::endl;
+			logger->error("put socket: max size reached!");
 		}
 		clientSslSocket->pollForWrite();
 		clientSslSocket->clientStatus(dsockets::ClientStatus::HELLO);
@@ -134,14 +131,14 @@ bool dispatcherProcess(
 		char configBuffer[4096];
 		ssize_t read_size = recv(unixSocket->descriptor(), configBuffer, sizeof(configBuffer), 0);
 		if(read_size < 0) {
-			fprintf(stderr, "Read config failed\n");
+			logger->critical("Read config failed");
 			return false;
 		}
-		printf("INFO: Dispatcher has received configuration read size = %ld\n", read_size);
-		printf("\n%.*s\n", static_cast<int>(read_size), configBuffer );
+		logger->info("INFO: Dispatcher has received configuration read size = {}", read_size);
+		// logger->debug("\n%.*s\n", static_cast<int>(read_size), configBuffer );
 		return processConfig( configBuffer, static_cast<size_t>(read_size) );
 	} else if( memcmp(message,"EXIT",4) == 0 ) {
-		printf("INFO: Dispatcher has received EXIT request = %ld\n", read_size);
+		logger->info("INFO: Dispatcher has received EXIT request = {}", read_size);
 		return false;
 	}
 
@@ -156,7 +153,7 @@ bool processClient(dsockets::Socket::Ptr clientSocket) {
     if( clientSocket->isReadAvailable() ) {
         char buffer[100];
         ssize_t bytes = dsockets::utils::read(clientSocket, buffer, 100, 0);
-        std::cerr << "dsockets::utils::read returns: " << bytes << std::endl;
+        logger->debug("dsockets::utils::read returns: {}", bytes);
 		if( bytes == 0 ) {
 			// Typical the client drop the connection.
 			// Try to write bytes to socket.
@@ -164,11 +161,11 @@ bool processClient(dsockets::Socket::Ptr clientSocket) {
 			// We will expect the POLLERR and POLLHUP.
 			bytes = dsockets::utils::write(clientSocket, "EXIT\n" );
 			if( bytes < 0 ) {
-				printf("client socket error, read (test write) failed:\n");
+				logger->error("client socket error, read (test write) failed.");
 				return false;
 			}
 		} else if(bytes > 0) {
-			printf("client reading socket: %ld\n",bytes);
+			logger->info("client reading socket: {}",bytes);
 			if( memcmp(buffer,"EXIT",4) == 0) {
 				clientSocket->clientStatus(dsockets::ClientStatus::BYE);
 			}
@@ -191,11 +188,11 @@ bool processClient(dsockets::Socket::Ptr clientSocket) {
             return false;
         }
         if( bytes == -1 ) {
-            fprintf(stderr, "write to client socket failed, drop connection: [%d] \"%s\"\n",errno,strerror(errno));
+            logger->error("write to client socket failed, drop connection: [{}] \"{}\"\n",errno,strerror(errno));
             //shutdown(clientSocket->descriptor(),SHUT_RDWR);
             return false;
         } else {
-            printf("write to client socket: %ld bytes\n",bytes);
+            logger->info("write to client socket: {} bytes",bytes);
             // Wait for client send command.
         }
     }
@@ -205,19 +202,20 @@ bool processClient(dsockets::Socket::Ptr clientSocket) {
 
 int main(int argc, char *argv[])
 try {
+	create_logger("dispatcher");
 	appCfg = ApplicationConfig::create(ApplicationType::DISPATCHER);
 
     if( argc != 2 ) {
-        fprintf(stderr, "Dispatcher started without argument, exiting...\n");
+        logger->critical( "Dispatcher started without argument, exiting...");
         return 0;
     }
-    printf("Dispatcher started\n");
-    printf("Try connect to: %s\n", argv[1]);
+    logger->info("Dispatcher started");
+    logger->info("Try connect to: {}", argv[1]);
 
     dsockets::utility::SocketFactory::Ptr unixSocketFactory = dsockets::utility::createUnixSocketFactory(argv[1]);
     dsockets::Socket::Ptr unixSocket = unixSocketFactory->createSocket();
     if(!unixSocket) {
-    	std::cerr << "FAILED: unix  socket create." << std::endl;
+    	logger->critical("FAILED: unix  socket create.");
     	return 1;
     }
 
@@ -248,7 +246,7 @@ try {
 			for( const auto& s : *reSocketsList ) {
 				//std::cout << "INFO: process re-events sockets list." << std::endl;
 				if(s->socketType() == dsockets::SocketType::UNIX) {
-					std::cout << "INFO: unix socket activity." << std::endl;
+					logger->info("INFO: unix socket activity.");
 					if(!dispatcherProcess(unixSocket, receivedTcpSocketFactory, socketsList)) {
 						dispatcherFailed = true;
 						break;
@@ -256,9 +254,9 @@ try {
 				} else if(s->socketType() == dsockets::SocketType::TCP ||
 						  s->socketType() == dsockets::SocketType::SSL) {
 					if(!processClient(s)) {
-				    	std::cerr << "WARNING: client dropped." << std::endl;
+				    	logger->error("WARNING: client dropped.");
 						if( !socketsList->delSocket(s) ) {
-							std::cerr << "FAILED: socket hasn't been deleted!" << std::endl;
+							logger->error("FAILED: socket hasn't been deleted!");
 						}
 					}
 				}
@@ -267,13 +265,13 @@ try {
         	/// TODO: process free time for something.
         } else if( errorType == dsockets::ErrorType::ERROR ) {
 			dispatcherFailed = true;
-			std::cerr << "FAILED: dispatcher has failed!" << std::endl;
+			logger->error("FAILED: dispatcher has failed!");
         }
     }
 
-    printf("Exit\n");
+    logger->info("Exit");
     return 0;
 } catch(const std::exception &e) {
-	std::cerr << "Exception: " << e.what() << std::endl;
+	logger->critical("Exception: {}", e.what());
 	return 13;
 }
